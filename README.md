@@ -1,4 +1,7 @@
 <div align="center">
+
+# Testing BoxDiff for my master's thesis
+
 <h1>BoxDiff 🎨 (ICCV 2023)</h1>
 <h3>BoxDiff: Text-to-Image Synthesis with Training-Free Box-Constrained Diffusion</h3>
 
@@ -12,7 +15,6 @@
 
 <img src="docs/boxdiff.gif" width="1000">
 
-## Testing BoxDiff for my master's thesis
 ### Citation
 ``` 
 @InProceedings{Xie_2023_ICCV,
