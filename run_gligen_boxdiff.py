@@ -90,8 +90,10 @@ def main(config: RunConfig):
     images = []
     for seed in config.seeds:
         print(f"Current seed is : {seed}")
-        #g = torch.Generator('cuda').manual_seed(seed)
-        g = torch.Generator('cpu').manual_seed(seed)
+        if torch.cuda.is_available():
+            g = torch.Generator('cuda').manual_seed(seed)
+        else:
+            g = torch.Generator('cpu').manual_seed(seed)
         controller = AttentionStore()
         controller.num_uncond_att_layers = -16
         image = run_on_prompt(prompt=config.prompt,
