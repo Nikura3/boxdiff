@@ -7,8 +7,8 @@ setlocal enabledelayedexpansion
 
 REM Variables
 set user=dvezzaro
-set source_dir=/home/dvezzaro/hf_gligen/dev/
-set destination_dir=C:/Users/david/Desktop/Diffusers/gligen-test/results
+set source_dir=/home/dvezzaro/hf_boxdiff/results
+set destination_dir=C:/Users/david/Desktop/Diffusers/boxdiff-test/results
 
 REM Get the current date in YYYY-MM-DD format
 for /f "tokens=2-4 delims=/ " %%a in ('date /t') do set mydate=%%c-%%a-%%b

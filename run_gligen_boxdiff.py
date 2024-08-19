@@ -1,4 +1,4 @@
-
+import pathlib
 import pprint
 from typing import List
 
@@ -23,7 +23,7 @@ def load_model():
     stable_diffusion_version = "masterful/gligen-1-4-generation-text-box"
     # If you cannot access the huggingface on your server, you can use the local prepared one.
     # stable_diffusion_version = "../../packages/diffusers/gligen_ckpts/diffusers-generation-text-box"
-    stable = BoxDiffPipeline.from_pretrained(stable_diffusion_version, use_safetensors=False).to(device)
+    stable = BoxDiffPipeline.from_pretrained(stable_diffusion_version, use_safetensors=False ,local_files_only=True).to(device)
 
     return stable
 
@@ -74,6 +74,8 @@ def run_on_prompt(prompt: List[str],
                     kernel_size=config.kernel_size,
                     sd_2_1=config.sd_2_1,
                     bbox=config.bbox,
+                    height=256,
+                    width=256,
                     config=config)
     image = outputs.images[0]
     return image
@@ -122,14 +124,12 @@ def main(config: RunConfig):
 
 if __name__ == '__main__':
     torch.cuda.empty_cache()
-    #torch.cuda.set_per_process_memory_fraction(0.8)  # Allocates only 80% of the GPU memory
     config = RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
                        gligen_phrases= ["a rabbit", "sunglasses"],
                        P=0.2,
                        L=1,
                        seeds=[1, 2, 3, 4, 5, 6, 7, 8, 9],
-                       token_indices=[2,4],
+                       token_indices=[2,5],
                        bbox=[[67, 87, 366, 512], [66, 130, 364, 262]],
-                       refine=False)
-    #print(config)
+                       output_path=pathlib.Path("results/"))
     main(config)

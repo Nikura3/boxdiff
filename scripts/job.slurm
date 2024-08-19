@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name="hf_boxdiff2"
+#SBATCH --job-name="hf_boxdiff"
 #SBATCH --output=output.out
 #SBATCH --error=err.log
-#SBATCH --time=01:00:00  # Maximum time limit (hh:mm:ss)
+#SBATCH --time=04:00:00  # Maximum time limit (hh:mm:ss)
 #SBATCH --partition=allgroups  # Partition name, e.g., general, gpu, etc.
 #SBATCH --ntasks=1  # Number of tasks
 #SBATCH --cpus-per-task=4  # Number of CPU cores per task
-#SBATCH --mem=12G  # Memory per node
-#SBATCH --time=01:00:00
+#SBATCH --mem=24G  # Memory per node
+#SBATCH --time=04:00:00
 #SBATCH --gres=gpu:1
 
 # Load required modules (if any)

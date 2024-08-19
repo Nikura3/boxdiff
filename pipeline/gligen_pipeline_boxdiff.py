@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import torch
+from diffusers.image_processor import VaeImageProcessor
 from torch.nn import functional as F
 
 from diffusers.utils import deprecate, is_accelerate_available, logging, replace_example_docstring
@@ -751,16 +752,25 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                         callback(i, t, latents)
 
         # 8. Post-processing
-        image = self.decode_latents(latents)
+        #image = self.prepare_latents(latents)
+        #image = self.image_processor.
+        #image = self.decode_latents(latents)
+        latents = 1 / self.vae.config.scaling_factor * latents
+        image = self.vae.decode(latents, return_dict=False)[0]
+        image = (image / 2 + 0.5).clamp(0, 1)
+        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
+        image = image.cpu().permute(0, 2, 3, 1).float().numpy()
+        #return image
 
         # 9. Run safety checker
-        image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+        #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
 
         # 10. Convert to PIL
         if output_type == "pil":
             image = self.numpy_to_pil(image)
 
         if not return_dict:
-            return (image, has_nsfw_concept)
+            return (image)#,has_nsfw_concept)
 
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
+        #return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
+        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=False)
