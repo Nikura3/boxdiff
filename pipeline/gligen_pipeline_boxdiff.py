@@ -3,22 +3,19 @@ from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import numpy as np
 import torch
-from diffusers.image_processor import VaeImageProcessor
 from torch.nn import functional as F
 
 from diffusers.utils import deprecate, is_accelerate_available, logging, replace_example_docstring
-from diffusers.utils.torch_utils import randn_tensor
 
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 
 from diffusers import StableDiffusionGLIGENPipeline
-
-from diffusers.models.attention_processor import Attention
+from diffusers.models.autoencoders import AutoencoderKL
 
 from utils.gaussian_smoothing import GaussianSmoothing
 from utils.ptp_utils import AttentionStore, aggregate_attention
 import PIL
-
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import StableDiffusionPipeline
 logger = logging.get_logger(__name__)
 
 class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
@@ -398,7 +395,6 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
         loss_fg, losses_fg = self._compute_loss(max_attention_per_index_fg, max_attention_per_index_bg, dist_x, dist_y, return_losses=True)
         # print(f"\t Finished with loss of: {loss_fg}")
         return loss_fg, latents, max_attention_per_index_fg
-
     @torch.no_grad()
     def __call__(
             self,
@@ -661,7 +657,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                         gligen_inpaint_latent_with_noise = self.scheduler.add_noise(
                             gligen_inpaint_latent,
                             torch.randn_like(gligen_inpaint_latent),
-                            t
+                            torch.tensor([t])
                         ).expand(latents.shape[0], -1, -1, -1).clone()
                         latents = gligen_inpaint_latent_with_noise * gligen_inpaint_mask + latents * (
                                     1 - gligen_inpaint_mask)
@@ -752,25 +748,43 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                         callback(i, t, latents)
 
         # 8. Post-processing
-        #image = self.prepare_latents(latents)
-        #image = self.image_processor.
-        #image = self.decode_latents(latents)
-        latents = 1 / self.vae.config.scaling_factor * latents
-        image = self.vae.decode(latents, return_dict=False)[0]
-        image = (image / 2 + 0.5).clamp(0, 1)
-        # we always cast to float32 as this does not cause significant overhead and is compatible with bfloat16
-        image = image.cpu().permute(0, 2, 3, 1).float().numpy()
-        #return image
+        # #image = self.decode_latents(latents)# Original code
+        # image=StableDiffusionPipeline.decode_latents(self, latents) # tolto dalla pipeline di GLIGEN perchè deprecato dalla pipeline di SD
+        #
+        # # 9. Run safety checker
+        # #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+        #
+        # # 10. Convert to PIL
+        # if output_type == "pil":
+        #      image = self.numpy_to_pil(image)
+        #
+        # if not return_dict:
+        #     return (image) #has_nsfw_concept)
+        #
+        # return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=False)#has_nsfw_concept)
 
-        # 9. Run safety checker
-        #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+        #UPDATED:
+        if not output_type == "latent":
+            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[0]
+            #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+            has_nsfw_concept = None
+        else:
+            image = latents
+            has_nsfw_concept = None
 
-        # 10. Convert to PIL
-        if output_type == "pil":
-            image = self.numpy_to_pil(image)
+        if has_nsfw_concept is None:
+            do_denormalize = [True] * image.shape[0]
+        else:
+            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+
+        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
+
+        # Offload all models
+        self.maybe_free_model_hooks()
 
         if not return_dict:
-            return (image)#,has_nsfw_concept)
+            return (image)#, has_nsfw_concept)
 
-        #return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=False)
+        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=False)#has_nsfw_concept)
+
+
