@@ -74,8 +74,8 @@ def run_on_prompt(prompt: List[str],
                     kernel_size=config.kernel_size,
                     sd_2_1=config.sd_2_1,
                     bbox=config.bbox,
-                    height=256,
-                    width=256,
+                    #height=256,
+                    #width=256,
                     config=config)
     image = outputs.images[0]
     return image
@@ -126,10 +126,12 @@ if __name__ == '__main__':
     torch.cuda.empty_cache()
     config = RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
                        gligen_phrases= ["a rabbit", "sunglasses"],
+                       seeds=[1],
                        P=0.2,
                        L=1,
-                       seeds=[1, 2, 3, 4, 5, 6, 7, 8, 9],
-                       token_indices=[2,5],
-                       bbox=[[67, 87, 366, 512], [66, 130, 364, 262]],
+                       refine=False,
+                       token_indices=[2,4],
+                       #bbox=[[12, 17, 226, 232],[47, 59, 191, 98]], #256
+                       bbox= [[67, 87, 366, 512], [66, 130, 364, 262]], #512
                        output_path=pathlib.Path("results/"))
     main(config)

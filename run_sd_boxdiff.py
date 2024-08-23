@@ -1,4 +1,4 @@
-
+import pathlib
 import pprint
 from typing import List
 
@@ -68,12 +68,14 @@ def run_on_prompt(prompt: List[str],
                     kernel_size=config.kernel_size,
                     sd_2_1=config.sd_2_1,
                     bbox=config.bbox,
-                    config=config)
+                    config=config,
+                    height=512,
+                    width=512)
     image = outputs.images[0]
     return image
 
 
-@pyrallis.wrap()
+#@pyrallis.wrap()
 def main(config: RunConfig):
     stable = load_model(config)
     token_indices = get_indices_to_alter(stable, config.prompt) if config.token_indices is None else config.token_indices
@@ -111,4 +113,14 @@ def main(config: RunConfig):
 
 
 if __name__ == '__main__':
-    main()
+    torch.cuda.empty_cache()
+    config = RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
+                       seeds=[1, 2, 3, 4],
+                       P=0.2,
+                       L=1,
+                       refine=False,
+                       token_indices=[2, 4],
+                       bbox=[[67,87,366,512],[66,130,364,262]],
+                       output_path=pathlib.Path("results/"))
+    print(config)
+    main(config)

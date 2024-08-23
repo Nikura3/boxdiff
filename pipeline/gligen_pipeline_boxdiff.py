@@ -6,6 +6,7 @@ import torch
 from torch.nn import functional as F
 
 from diffusers.utils import deprecate, is_accelerate_available, logging, replace_example_docstring
+from diffusers.utils.torch_utils import randn_tensor
 
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 
@@ -507,7 +508,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
 
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
-            prompt, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds
+            prompt=prompt, height=height, width=width, callback_steps=callback_steps, negative_prompt=negative_prompt, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, gligen_phrases=gligen_phrases,gligen_boxes=gligen_boxes
         )
 
         # 2. Define call parameters
