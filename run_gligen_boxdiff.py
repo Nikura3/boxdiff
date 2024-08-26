@@ -1,13 +1,15 @@
 import pathlib
 import pprint
+import time
 from typing import List
 
+import prompt_toolkit.layout
 #import pyrallis
 import torch
 from PIL import Image
 from config import RunConfig
 from pipeline.gligen_pipeline_boxdiff import BoxDiffPipeline
-from utils import ptp_utils, vis_utils
+from utils import ptp_utils, vis_utils, logger
 from utils.ptp_utils import AttentionStore
 
 import numpy as np
@@ -46,6 +48,7 @@ def run_on_prompt(prompt: List[str],
                   token_indices: List[int],
                   seed: torch.Generator,
                   config: RunConfig) -> Image.Image:
+
     if controller is not None:
         ptp_utils.register_attention_control(model, controller)
 
@@ -74,8 +77,8 @@ def run_on_prompt(prompt: List[str],
                     kernel_size=config.kernel_size,
                     sd_2_1=config.sd_2_1,
                     bbox=config.bbox,
-                    #height=256,
-                    #width=256,
+                    height=512,
+                    width=512,
                     config=config)
     image = outputs.images[0]
     return image
@@ -83,8 +86,10 @@ def run_on_prompt(prompt: List[str],
 
 #@pyrallis.wrap()
 def main(config: RunConfig):
+
     stable = load_model()
     token_indices = get_indices_to_alter(stable, config.prompt) if config.token_indices is None else config.token_indices
+    l=logger.Logger(config.output_path)
 
     if len(config.bbox[0]) == 0:
         config.bbox = draw_rectangle()
@@ -92,6 +97,9 @@ def main(config: RunConfig):
     images = []
     for seed in config.seeds:
         print(f"Current seed is : {seed}")
+
+        start=time.time()
+
         if torch.cuda.is_available():
             g = torch.Generator('cuda').manual_seed(seed)
         else:
@@ -104,6 +112,11 @@ def main(config: RunConfig):
                               token_indices=token_indices,
                               seed=g,
                               config=config)
+        end = time.time()
+
+        l.log_time_run(start,end)
+
+
         prompt_output_path = config.output_path / config.prompt[:100]
         prompt_output_path.mkdir(exist_ok=True, parents=True)
         image.save(prompt_output_path / f'{seed}.png')
@@ -117,6 +130,9 @@ def main(config: RunConfig):
             draw.dashed_rectangle([(x1, y1), (x2, y2)], dash=(5, 5), outline=config.color[i], width=5)
         canvas.save(prompt_output_path / f'{seed}_canvas.png')
 
+    l.log_gpu_memory_instance(config)
+    l.log_execution_time()
+
     # save a grid of results across all seeds
     joined_image = vis_utils.get_image_grid(images)
     joined_image.save(config.output_path / f'{config.prompt}.png')
@@ -124,14 +140,31 @@ def main(config: RunConfig):
 
 if __name__ == '__main__':
     torch.cuda.empty_cache()
-    config = RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
+    prompt_collection=[
+        RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
                        gligen_phrases= ["a rabbit", "sunglasses"],
-                       seeds=[1],
+                       seeds=[1, 2, 3, 4,5,6,7,8,9],
                        P=0.2,
                        L=1,
                        refine=False,
                        token_indices=[2,4],
-                       #bbox=[[12, 17, 226, 232],[47, 59, 191, 98]], #256
+                       #bbox=[[34, 44, 183, 256],[33, 65, 182, 131]], #256
                        bbox= [[67, 87, 366, 512], [66, 130, 364, 262]], #512
-                       output_path=pathlib.Path("results/"))
-    main(config)
+                       output_path=pathlib.Path("BoxDiff_GLIGEN/")),
+        RunConfig(prompt="A small red brown and white dog catches a football in midair as a man and child look on",
+                       gligen_phrases= ["child","A small red brown and white dog","a man","a football"],
+                       seeds=[1, 2, 3, 4,5,6,7,8,9],
+                       P=0.2,
+                       L=1,
+                       refine=False,
+                       token_indices=[1,2,3,4],
+                       #bbox=[[34, 44, 183, 256],[33, 65, 182, 131]], #256
+                       bbox= [[108,242,165,457],#child
+                              [216,158,287,351],#a small red brown and white dog
+                              [325,98,503,508],#a man
+                              [200,175,232,250]# a football
+                              ],
+                       output_path=pathlib.Path("BoxDiff_GLIGEN/"))
+    ]
+
+    main(prompt_collection[0])
