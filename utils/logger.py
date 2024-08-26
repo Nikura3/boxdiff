@@ -11,7 +11,7 @@ class Logger:
         self._logger = open(path / "log.txt", "w")
         self._runs = []
     def log_gpu_memory_instance(self,config: RunConfig):
-        name = torch.cuda.current_device()
+        name = torch.cuda.get_device_name(torch.cuda.current_device())
         total_memory = torch.cuda.get_device_properties(torch.cuda.current_device()).total_memory
         reserved_memory = torch.cuda.memory_reserved(torch.cuda.current_device())
 
@@ -20,7 +20,7 @@ class Logger:
         # print(f"Reserved memory: {reserved_memory / pow(2, 30):.2f} GB")
         # print(f"Free memory: {free_memory / pow(2, 30):.2f} GB")
 
-        lines=[datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-")+config.prompt,
+        lines=[datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-")+config.prompt+"\n",
                "Assigned GPU:"+str(name)+"\n",
                f"Total memory: {total_memory / pow(2, 30):.2f} GB\n",
                f"Reserved memory: {torch.cuda.max_memory_reserved(torch.cuda.current_device()) / pow(2, 30):.2f} GB\n"
