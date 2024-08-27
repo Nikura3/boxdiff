@@ -7,7 +7,6 @@ from IPython.display import display
 from PIL import Image
 from typing import Union, Tuple, List
 
-#from diffusers.models.attention import Attention as CrossAttention
 from diffusers.models.attention_processor import AttentionProcessor as CrossAttention
 
 def text_under_image(image: np.ndarray, text: str, text_color: Tuple[int, int, int] = (0, 0, 0)) -> np.ndarray:

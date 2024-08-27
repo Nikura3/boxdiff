@@ -89,6 +89,7 @@ def main(config: RunConfig):
 
     stable = load_model()
     token_indices = get_indices_to_alter(stable, config.prompt) if config.token_indices is None else config.token_indices
+    #intialize logger
     l=logger.Logger(config.output_path)
 
     if len(config.bbox[0]) == 0:
@@ -98,6 +99,7 @@ def main(config: RunConfig):
     for seed in config.seeds:
         print(f"Current seed is : {seed}")
 
+        #start stopwatch
         start=time.time()
 
         if torch.cuda.is_available():
@@ -112,10 +114,10 @@ def main(config: RunConfig):
                               token_indices=token_indices,
                               seed=g,
                               config=config)
+        #end stopwatch
         end = time.time()
-
+        #save to logger
         l.log_time_run(start,end)
-
 
         prompt_output_path = config.output_path / config.prompt[:100]
         prompt_output_path.mkdir(exist_ok=True, parents=True)
@@ -130,8 +132,10 @@ def main(config: RunConfig):
             draw.dashed_rectangle([(x1, y1), (x2, y2)], dash=(5, 5), outline=config.color[i], width=5)
         canvas.save(prompt_output_path / f'{seed}_canvas.png')
 
+    #log gpu stats
     l.log_gpu_memory_instance(config)
-    l.log_execution_time()
+    #save to csv_file
+    l.save_log_to_csv()
 
     # save a grid of results across all seeds
     joined_image = vis_utils.get_image_grid(images)
@@ -143,7 +147,7 @@ if __name__ == '__main__':
     prompt_collection=[
         RunConfig(prompt="A rabbit wearing sunglasses looks very proud",
                        gligen_phrases= ["a rabbit", "sunglasses"],
-                       seeds=[1, 2, 3, 4,5,6,7,8,9],
+                       seeds=[1,2],
                        P=0.2,
                        L=1,
                        refine=False,
@@ -166,5 +170,4 @@ if __name__ == '__main__':
                               ],
                        output_path=pathlib.Path("BoxDiff_GLIGEN/"))
     ]
-
     main(prompt_collection[0])
