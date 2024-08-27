@@ -133,9 +133,9 @@ def main(config: RunConfig):
         canvas.save(prompt_output_path / f'{seed}_canvas.png')
 
     #log gpu stats
-    l.log_gpu_memory_instance(config)
+    l.log_gpu_memory_instance()
     #save to csv_file
-    l.save_log_to_csv()
+    l.save_log_to_csv(config.prompt)
 
     # save a grid of results across all seeds
     joined_image = vis_utils.get_image_grid(images)
