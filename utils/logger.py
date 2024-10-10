@@ -11,7 +11,7 @@ class Logger:
         self._name=""
         self._reserved_memory=0
         self._runs = []
-        self._csvwriter = csv.writer(open(path / "log.csv", "w"))
+        self._csvwriter = csv.writer(open(path + "/log.csv", "w"))
         fields = ['ID', 'Desc', 'GPU', 'Reserved memory (GB)', 'Avg time (s)']
         self._csvwriter.writerow(fields)
     def log_gpu_memory_instance(self):
@@ -24,7 +24,7 @@ class Logger:
     def save_log_to_csv(self, prompt):
         all_elapsed=[]
 
-        for i in range(0,9):
+        for i in range(0,17):
             all_elapsed.append(np.nan)
 
         for run in enumerate(self._runs):

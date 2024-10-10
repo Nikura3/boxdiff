@@ -95,7 +95,11 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                 return_tensors="pt",
             )
             text_input_ids = text_inputs.input_ids
-            untruncated_ids = self.tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
+            untruncated_ids = self.tokenizer(
+                prompt,
+                padding="longest",
+                return_tensors="pt"
+            ).input_ids
 
             if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
                 text_input_ids, untruncated_ids
@@ -183,6 +187,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
 
         return text_inputs, prompt_embeds
 
+    #THESE ARE THE ACTUAL BOXDIFF CONSTRAINTS
     def _compute_max_attention_per_index(self,
                                          attention_maps: torch.Tensor,
                                          indices_to_alter: List[int],
@@ -224,9 +229,12 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
             # coordinates to masks
             obj_mask = torch.zeros_like(image)
             ones_mask = torch.ones([y2 - y1, x2 - x1], dtype=obj_mask.dtype).to(obj_mask.device)
+            #foreground mask
             obj_mask[y1:y2, x1:x2] = ones_mask
+            #background mask
             bg_mask = 1 - obj_mask
 
+            #gaussian smoothing to the attentions
             if smooth_attentions:
                 smoothing = GaussianSmoothing(channels=1, kernel_size=kernel_size, sigma=sigma, dim=2).cuda()
                 input = F.pad(image.unsqueeze(0).unsqueeze(0), (1, 1, 1, 1), mode='reflect')
@@ -268,6 +276,8 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                                                    config=None,
                                                    ):
         """ Aggregates the attention for each token and computes the max activation value for each token to alter. """
+
+        # aggregate the attention maps for each token
         attention_maps = aggregate_attention(
             attention_store=attention_store,
             res=attention_res,
@@ -275,6 +285,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
             is_cross=True,
             select=0)
 
+        # compute the attention maps with higher response for each token wrt the corresponding binary mask
         max_attention_per_index_fg, max_attention_per_index_bg, dist_x, dist_y = self._compute_max_attention_per_index(
             attention_maps=attention_maps,
             indices_to_alter=indices_to_alter,
@@ -527,13 +538,15 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # 3. Encode input prompt
+        # text_inputs:tokens
+        # prompt_embeds:corresponding embeddings
         text_inputs, prompt_embeds = self._encode_prompt(
             prompt,
             device,
             num_images_per_prompt,
             do_classifier_free_guidance,
             negative_prompt,
-            prompt_embeds=prompt_embeds,
+            prompt_embeds=prompt_embeds,#optional in case you already have
             negative_prompt_embeds=negative_prompt_embeds,
         )
 
@@ -542,6 +555,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
         timesteps = self.scheduler.timesteps
 
         # 5. Prepare latent variables
+        # For latent diffusion models
         num_channels_latents = self.unet.in_channels
         latents = self.prepare_latents(
             batch_size * num_images_per_prompt,
@@ -554,13 +568,13 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
             latents,
         )
 
-        def draw_inpaint_mask_from_boxes(boxes, size):
-            inpaint_mask = torch.ones(size[0], size[1])
-            for box in boxes:
-                x0, x1 = box[0] * size[0], box[2] * size[0]
-                y0, y1 = box[1] * size[1], box[3] * size[1]
-                inpaint_mask[int(y0):int(y1), int(x0):int(x1)] = 0
-            return inpaint_mask
+        # def draw_inpaint_mask_from_boxes(boxes, size):
+        #     inpaint_mask = torch.ones(size[0], size[1])
+        #     for box in boxes:
+        #         x0, x1 = box[0] * size[0], box[2] * size[0]
+        #         y0, y1 = box[1] * size[1], box[3] * size[1]
+        #         inpaint_mask[int(y0):int(y1), int(x0):int(x1)] = 0
+        #     return inpaint_mask
 
         # 5.1 Prepare GLIGEN variables
         if gligen_phrases is not None:
@@ -568,16 +582,26 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
             assert batch_size == 1
             max_objs = 30
             _boxes = gligen_boxes
-            tokenizer_inputs = self.tokenizer(gligen_phrases, padding=True, return_tensors="pt").to(
-                self.text_encoder.device)
+
+            # prepare batched input to the GLIGENTextBoundingboxProjection (boxes, phrases, mask)
+            # Get tokens for phrases from pre-trained CLIPTokenizer
+            tokenizer_inputs = self.tokenizer(gligen_phrases, padding=True, return_tensors="pt").to(self.text_encoder.device)
+            # For the token, we use the same pre-trained text encoder
+            # to obtain its text feature
+            # ** = unpacking del dizionario : chiave = più valori passati separatamente
+            # per andare a formare il grounding token
             _text_embeddings = self.text_encoder(**tokenizer_inputs).pooler_output
             n_objs = min(len(_boxes), max_objs)
             device = self.text_encoder.device
             dtype = self.text_encoder.dtype
+
+            # For each entity, described in phrases, is denoted with a bounding box,
+            # we represent the location information as (xmin,ymin,xmax,ymax)
             boxes = torch.zeros(max_objs, 4, device=device, dtype=dtype)
             boxes[:n_objs] = torch.tensor(_boxes[:n_objs])
             text_embeddings = torch.zeros(max_objs, 768, device=device, dtype=dtype)
             text_embeddings[:n_objs] = _text_embeddings[:n_objs]
+            # Generate a mask for each object that is entity described by phrases
             masks = torch.zeros(max_objs, device=device, dtype=dtype)
             masks[:n_objs] = 1
 
@@ -597,38 +621,38 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                 'masks': masks
             }
 
-            # Prepare latent variables for GLIGEN inpainting
-            if gligen_inpaint_image is not None:
-                if gligen_inpaint_image.size != (self.vae.sample_size, self.vae.sample_size):
-                    def crop(im, new_width, new_height):
-                        width, height = im.size
-                        left = (width - new_width) / 2
-                        top = (height - new_height) / 2
-                        right = (width + new_width) / 2
-                        bottom = (height + new_height) / 2
-                        return im.crop((left, top, right, bottom))
-
-                    def target_size_center_crop(im, new_hw):
-                        width, height = im.size
-                        if width != height:
-                            im = crop(im, min(height, width), min(height, width))
-                        return im.resize((new_hw, new_hw), PIL.Image.LANCZOS)
-
-                    gligen_inpaint_image = target_size_center_crop(gligen_inpaint_image, self.vae.sample_size)
-
-                gligen_inpaint_image = torch.from_numpy(np.asarray(gligen_inpaint_image))
-                gligen_inpaint_image = gligen_inpaint_image.unsqueeze(0).permute(0, 3, 1, 2)
-                gligen_inpaint_image = gligen_inpaint_image.to(dtype=torch.float32) / 127.5 - 1.0
-                gligen_inpaint_image = gligen_inpaint_image.to(dtype=self.vae.dtype, device=self.vae.device)
-                gligen_inpaint_latent = self.vae.encode(gligen_inpaint_image).latent_dist.sample()
-                gligen_inpaint_latent = self.vae.config.scaling_factor * gligen_inpaint_latent
-                gligen_inpaint_mask = draw_inpaint_mask_from_boxes(_boxes[:n_objs], gligen_inpaint_latent.shape[2:])
-                gligen_inpaint_mask = gligen_inpaint_mask.to(dtype=gligen_inpaint_latent.dtype,
-                                                             device=gligen_inpaint_latent.device)
-                gligen_inpaint_mask = gligen_inpaint_mask[None, None]
-                gligen_inpaint_mask_addition = torch.cat(
-                    (gligen_inpaint_latent * gligen_inpaint_mask, gligen_inpaint_mask), dim=1)
-                gligen_inpaint_mask_addition = gligen_inpaint_mask_addition.expand(repeat_batch, -1, -1, -1).clone()
+            # # Prepare latent variables for GLIGEN inpainting
+            # if gligen_inpaint_image is not None:
+            #     if gligen_inpaint_image.size != (self.vae.sample_size, self.vae.sample_size):
+            #         def crop(im, new_width, new_height):
+            #             width, height = im.size
+            #             left = (width - new_width) / 2
+            #             top = (height - new_height) / 2
+            #             right = (width + new_width) / 2
+            #             bottom = (height + new_height) / 2
+            #             return im.crop((left, top, right, bottom))
+            #
+            #         def target_size_center_crop(im, new_hw):
+            #             width, height = im.size
+            #             if width != height:
+            #                 im = crop(im, min(height, width), min(height, width))
+            #             return im.resize((new_hw, new_hw), PIL.Image.LANCZOS)
+            #
+            #         gligen_inpaint_image = target_size_center_crop(gligen_inpaint_image, self.vae.sample_size)
+            #
+            #     gligen_inpaint_image = torch.from_numpy(np.asarray(gligen_inpaint_image))
+            #     gligen_inpaint_image = gligen_inpaint_image.unsqueeze(0).permute(0, 3, 1, 2)
+            #     gligen_inpaint_image = gligen_inpaint_image.to(dtype=torch.float32) / 127.5 - 1.0
+            #     gligen_inpaint_image = gligen_inpaint_image.to(dtype=self.vae.dtype, device=self.vae.device)
+            #     gligen_inpaint_latent = self.vae.encode(gligen_inpaint_image).latent_dist.sample()
+            #     gligen_inpaint_latent = self.vae.config.scaling_factor * gligen_inpaint_latent
+            #     gligen_inpaint_mask = draw_inpaint_mask_from_boxes(_boxes[:n_objs], gligen_inpaint_latent.shape[2:])
+            #     gligen_inpaint_mask = gligen_inpaint_mask.to(dtype=gligen_inpaint_latent.dtype,
+            #                                                  device=gligen_inpaint_latent.device)
+            #     gligen_inpaint_mask = gligen_inpaint_mask[None, None]
+            #     gligen_inpaint_mask_addition = torch.cat(
+            #         (gligen_inpaint_latent * gligen_inpaint_mask, gligen_inpaint_mask), dim=1)
+            #     gligen_inpaint_mask_addition = gligen_inpaint_mask_addition.expand(repeat_batch, -1, -1, -1).clone()
 
         num_grounding_steps = int(gligen_scheduled_sampling_beta * len(timesteps))
         self.enable_fuser(True)
@@ -646,22 +670,23 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
 
+                #denoising step
                 with torch.enable_grad():
-
+                    # Scheduled sampling
                     if i == num_grounding_steps:
                         self.enable_fuser(False)
 
                     if latents.shape[1] != 4:
                         latents = torch.randn_like(latents[:, :4])
 
-                    if gligen_inpaint_image is not None:
-                        gligen_inpaint_latent_with_noise = self.scheduler.add_noise(
-                            gligen_inpaint_latent,
-                            torch.randn_like(gligen_inpaint_latent),
-                            torch.tensor([t])
-                        ).expand(latents.shape[0], -1, -1, -1).clone()
-                        latents = gligen_inpaint_latent_with_noise * gligen_inpaint_mask + latents * (
-                                    1 - gligen_inpaint_mask)
+                    # if gligen_inpaint_image is not None:
+                    #     gligen_inpaint_latent_with_noise = self.scheduler.add_noise(
+                    #         gligen_inpaint_latent,
+                    #         torch.randn_like(gligen_inpaint_latent),
+                    #         torch.tensor([t])
+                    #     ).expand(latents.shape[0], -1, -1, -1).clone()
+                    #     latents = gligen_inpaint_latent_with_noise * gligen_inpaint_mask + latents * (
+                    #                 1 - gligen_inpaint_mask)
 
                     latents = latents.clone().detach().requires_grad_(True)
 
@@ -669,8 +694,8 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                    if gligen_inpaint_image is not None:
-                        latent_model_input = torch.cat((latent_model_input, gligen_inpaint_mask_addition), dim=1)
+                    # if gligen_inpaint_image is not None:
+                    #     latent_model_input = torch.cat((latent_model_input, gligen_inpaint_mask_addition), dim=1)
 
                     # Forward pass of denoising with text conditioning
                     noise_pred_text = self.unet(latent_model_input, t,
@@ -680,6 +705,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                     # Get max activation value for each subject token
                     max_attention_per_index_fg, max_attention_per_index_bg, dist_x, dist_y = self._aggregate_and_get_max_attention_per_token(
                         attention_store=attention_store,
+                        #target token, extracted from the whole caption not only gligen phrases
                         indices_to_alter=indices_to_alter,
                         attention_res=attention_res,
                         smooth_attentions=smooth_attentions,
@@ -690,6 +716,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                         config=config,
                     )
 
+                    #so without boxdiff loss
                     if not run_standard_sd:
 
                         loss_fg, loss = self._compute_loss(max_attention_per_index_fg, max_attention_per_index_bg, dist_x, dist_y)
@@ -726,6 +753,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
 
                             # print(f'Iteration {i} | Loss: {loss:0.4f}')
 
+                #getting zt
                 # predict the noise residual
                 noise_pred = self.unet(
                     latent_model_input,
@@ -747,7 +775,6 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
                     progress_bar.update()
                     if callback is not None and i % callback_steps == 0:
                         callback(i, t, latents)
-
         # 8. Post-processing
         # #image = self.decode_latents(latents)# Original code
         # image=StableDiffusionPipeline.decode_latents(self, latents) # tolto dalla pipeline di GLIGEN perchè deprecato dalla pipeline di SD
@@ -764,7 +791,7 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
         #
         # return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=False)#has_nsfw_concept)
 
-        #UPDATED:
+        #MAKE IT COMPATIBLE TO THE NEW VERSION OF DIFFUSERS:
         if not output_type == "latent":
             image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[0]
             #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
@@ -779,7 +806,6 @@ class BoxDiffPipeline(StableDiffusionGLIGENPipeline):
             do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
 
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
         # Offload all models
         self.maybe_free_model_hooks()
 
