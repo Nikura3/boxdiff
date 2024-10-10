@@ -14,7 +14,7 @@ class RunConfig:
     # Which random seeds to use when generating
     seeds: List[int] = field(default_factory=lambda: [42])
     # Path to save all outputs to
-    output_path: Path = Path('./outputs')
+    output_path: Path = Path('./results/')
     # Number of denoising steps
     n_inference_steps: int = 50
     # Text guidance scale
@@ -53,5 +53,5 @@ class RunConfig:
     eval_output_path: Path = Path('./outputs/eval')
 
 
-    def __post_init__(self):
-        self.output_path.mkdir(exist_ok=True, parents=True)
+    # def __post_init__(self):
+    #     self.output_path.mkdir(exist_ok=True, parents=True)
