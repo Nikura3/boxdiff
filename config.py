@@ -46,7 +46,7 @@ class RunConfig:
     P: float = 0.2
     # number of pixels around the corner to be selected
     L: int = 1
-    refine: bool = True
+    refine: bool = False
     gligen_phrases: List[str] = field(default_factory=lambda: ['', ''])
     n_splits: int = 4
     which_one: int = 1
