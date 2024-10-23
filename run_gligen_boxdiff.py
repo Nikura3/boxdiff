@@ -92,7 +92,32 @@ def make_tinyHRS():
     }
     return data_dict
 
+def sample():
+    prompts = ["A bear wearing sunglasses and a green tie looks very proud" #0
+               ]
+    
+
+    bbox = [[[67,87,366,512],[66,130,364,262],[178,327,266,512]]#0
+            ]
+
+    phrases = [["bear","sunglasses","green tie"]]
+
+    token_indices = [[2,4,7],#0
+                     ]
+    data_dict = {
+    i: {
+        "prompt": prompts[i],
+        "bbox": bbox[i],
+        "phrases": phrases[i],
+        "token_indices": token_indices[i]
+    }
+    for i in range(len(prompts))
+    }
+    return data_dict
+
+
 def make_QBench():
+
     prompts = ["A bus", #0
                "A bus and a bench", #1
                "A bus next to a bench and a bird", #2
@@ -106,9 +131,14 @@ def make_QBench():
                "A bus and a pizza on the left of a bench and a bird", #10
                "A bus and a pizza on the left of a bench and below a bird", #11
                ]
+
+    ids = []
+
+    for i in range(len(prompts)):
+        ids.append(str(i).zfill(3))
     
 
-    bbox = [[[2,121,251,460]],#0
+    bboxes = [[[2,121,251,460]],#0
             [[2,121,251,460], [274,345,503,496]],#1
             [[2,121,251,460], [274,345,503,496],[344,32,500,187]],#2
             [[2,121,251,460], [274,345,503,496],[344,32,500,187],[58,327,187,403]],#3
@@ -151,8 +181,9 @@ def make_QBench():
                      ]
     data_dict = {
     i: {
+        "id": ids[i],
         "prompt": prompts[i],
-        "bbox": bbox[i],
+        "bboxes": bboxes[i],
         "phrases": phrases[i],
         "token_indices": token_indices[i]
     }
@@ -176,6 +207,20 @@ def get_indices_to_alter(stable, prompt: str) -> List[int]:
                           "alter (e.g., 2,5): ")
     token_indices = [int(i) for i in token_indices.split(",")]
     print(f"Altering tokens: {[token_idx_to_word[i] for i in token_indices]}")
+    return token_indices 
+
+#TODO best matching
+def assign_indices_to_alter(stable, prompt: str,gligen_phrase:List[str] ) -> List[int]:
+    print(stable.tokenizer(prompt)['input_ids'])
+    input()
+    token_idx_to_word = {idx: stable.tokenizer.decode(t)
+                         for idx, t in enumerate(stable.tokenizer(prompt)['input_ids'])
+                         if 0 < idx < len(stable.tokenizer(prompt)['input_ids']) - 1}
+    pprint.pprint(token_idx_to_word)
+    token_indices = input("Please enter the a comma-separated list indices of the tokens you wish to "
+                          "alter (e.g., 2,5): ")
+    token_indices = [int(i) for i in token_indices.split(",")]
+    print(f"Altering tokens: {[token_idx_to_word[i] for i in token_indices]}")
     return token_indices
 
 
@@ -190,8 +235,8 @@ def run_on_prompt(prompt: List[str],
         ptp_utils.register_attention_control(model, controller)
 
     gligen_boxes = []
-    for i in range(len(config.bbox)):
-        x1, y1, x2, y2 = config.bbox[i]
+    for i in range(len(config.bboxes)):
+        x1, y1, x2, y2 = config.bboxes[i]
         gligen_boxes.append([x1/512, y1/512, x2/512, y2/512])
 
     outputs = model(prompt=prompt,
@@ -213,10 +258,12 @@ def run_on_prompt(prompt: List[str],
                     sigma=config.sigma,
                     kernel_size=config.kernel_size,
                     sd_2_1=config.sd_2_1,
-                    bbox=config.bbox,
+                    bbox=config.bboxes,
                     height=512,
                     width=512,
-                    config=config)
+                    config=config,
+                    #negative_prompt='collage, split frame, frame, border, tiled, multiple images, diptych, triptych'
+                    )
     image = outputs.images[0]
     return image
 
@@ -225,7 +272,7 @@ def run_on_prompt(prompt: List[str],
 def main(config: RunConfig):
 
     stable = load_model()
-    token_indices = get_indices_to_alter(stable, config.prompt) if config.token_indices is None else config.token_indices
+    token_indices = get_indices_to_alter(stable, config.prompt, config.gligen_phrases) if config.token_indices is None else config.token_indices
     
     #intialize logger
     l=logger.Logger(config.output_path)
@@ -264,7 +311,7 @@ def main(config: RunConfig):
 
         
         #draw the bounding boxes
-        image=torchvision.utils.draw_bounding_boxes(tf.pil_to_tensor(image),torch.Tensor(bench[sample_to_generate]['bbox']),labels=bench[sample_to_generate]['phrases'],colors=['blue', 'red', 'purple', 'orange', 'green', 'yellow', 'black', 'gray', 'white'],width=4)
+        image=torchvision.utils.draw_bounding_boxes(tf.pil_to_tensor(image),torch.Tensor(bench[sample_to_generate]['bboxes']),labels=bench[sample_to_generate]['phrases'],colors=['blue', 'red', 'purple', 'orange', 'green', 'yellow', 'black', 'gray', 'white'],width=4)
         #list of tensors
         gen_bboxes_images.append(image)
         tf.to_pil_image(image).save(output_path+str(seed)+"_bboxes.png")
@@ -288,24 +335,25 @@ def main(config: RunConfig):
 if __name__ == '__main__':
     height = 512
     width = 512
-    seeds = range [1,17]
+    seeds = range(1,17)
 
     #bench=make_tinyHRS()
     bench=make_QBench()
 
     model_name="QBench-BD_G"
-    for sample_to_generate in range(1,len(bench)):
-        output_path = "./results/"+model_name+"/"+ bench[sample_to_generate]['prompt'] + "/"
+    for sample_to_generate in range(0,len(bench)):
+        output_path = "./results/"+model_name+"/"+ bench[sample_to_generate]['id']+'_'+bench[sample_to_generate]['prompt'] + "/"
 
         if (not os.path.isdir(output_path)):
             os.makedirs(output_path)
         print("Sample number ",sample_to_generate)
         torch.cuda.empty_cache()
         main(RunConfig(
+            prompt_id=bench[sample_to_generate]['id'],
             prompt=bench[sample_to_generate]['prompt'],
             gligen_phrases=bench[sample_to_generate]['phrases'],
             seeds=seeds,
             token_indices=bench[sample_to_generate]['token_indices'],
-            bbox=bench[sample_to_generate]['bbox'],
+            bboxes=bench[sample_to_generate]['bboxes'],
             output_path=output_path,
         )) 

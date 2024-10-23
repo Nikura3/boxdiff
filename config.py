@@ -5,6 +5,8 @@ from typing import Dict, List
 
 @dataclass
 class RunConfig:
+    # ID Text prompt
+    prompt_id:str
     # Guiding text prompt
     prompt: str
     # Whether to use Stable Diffusion v2.1
@@ -41,7 +43,7 @@ class RunConfig:
     save_cross_attention_maps: bool = False
 
     # BoxDiff
-    bbox: List[list] = field(default_factory=lambda: [[], []])
+    bboxes: List[list] = field(default_factory=lambda: [[], []])
     color: List[str] = field(default_factory=lambda: ['blue', 'red', 'purple', 'orange', 'green', 'yellow', 'black'])
     P: float = 0.2
     # number of pixels around the corner to be selected
