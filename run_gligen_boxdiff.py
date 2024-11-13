@@ -213,7 +213,7 @@ def readPromptsCSV(path):
 def load_model():
     device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
     stable_diffusion_version = "masterful/gligen-1-4-generation-text-box"
-    stable = BoxDiffPipeline.from_pretrained(stable_diffusion_version, use_safetensors=False ,local_files_only=True).to(device)
+    stable = BoxDiffPipeline.from_pretrained(stable_diffusion_version, use_safetensors=False,local_files_only=True).to(device)
 
     return stable
 
@@ -246,10 +246,16 @@ def calculateTokenIndices(stable, prompt: str, phrases) -> List[int]:
     token_idx_to_word = {idx: stable.tokenizer.decode(t)
                          for idx, t in enumerate(stable.tokenizer(prompt)['input_ids'])
                          if 0 < idx < len(stable.tokenizer(prompt)['input_ids']) - 1}
+    
     for target_token in phrases:
         for key,value in token_idx_to_word.items():
             if value == target_token:
                 token_indices.append(key)
+                break
+            elif value in target_token:
+                token_indices.append(key)
+                break
+                
     return token_indices 
 
 def run_on_prompt(prompt: List[str],
