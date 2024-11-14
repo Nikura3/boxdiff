@@ -248,14 +248,14 @@ def calculateTokenIndices(stable, prompt: str, phrases) -> List[int]:
                          if 0 < idx < len(stable.tokenizer(prompt)['input_ids']) - 1}
     
     for target_token in phrases:
+        max_len = 0
+        candidate_token_key=None
         for key,value in token_idx_to_word.items():
-            if value == target_token:
-                token_indices.append(key)
-                break
-            elif value in target_token:
-                token_indices.append(key)
-                break
-                
+            if value in target_token:
+                if(len(value)>max_len):#find the longest substring 
+                    max_len=len(value)
+                    candidate_token_key=key
+        token_indices.append(candidate_token_key)
     return token_indices 
 
 def run_on_prompt(prompt: List[str],
