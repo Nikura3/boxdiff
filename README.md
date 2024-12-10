@@ -13,8 +13,6 @@
 
 </div>
 
-<img src="docs/boxdiff.gif" width="1000">
-
 ### Citation
 ``` 
 @InProceedings{Xie_2023_ICCV,
